@@ -4,3 +4,12 @@ target
 # Local settings
 .soroban
 .stellar
+
+
+node_modules/
+.env
+target/
+*.wasm
+*.d
+dist/
+.DS_Store
