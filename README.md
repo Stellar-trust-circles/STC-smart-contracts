@@ -172,7 +172,7 @@ node cli.js status --circle <CONTRACT_ID>
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run the project locally and pick up an open issue.
 
-Issues tagged [`good first issue`](../../issues?q=label%3A%22good+first+issue%22) are a great place to start.
+Issues tagged [`good first issue`](../../issues?q=label%3A%22good+first+issue%22) are a great place to start
 
 ---
 
