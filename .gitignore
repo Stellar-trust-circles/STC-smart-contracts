@@ -13,3 +13,4 @@ target/
 *.d
 dist/
 .DS_Store
+test_snapshots/
