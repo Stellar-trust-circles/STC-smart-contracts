@@ -1,85 +1,81 @@
-# Contributing to Stellar Trust Circles
+# Contributing to Trust Circle Contracts
 
-Thanks for your interest! This project is open source and welcomes contributions of all kinds — bug fixes, new features, documentation improvements, and ideas.
+Thanks for your interest in contributing! This repo contains the Soroban smart contracts for the Stellar Trust Circles platform.
 
 ---
 
-## Quick start
+## Setup
 
 ### Prerequisites
-- Node.js 18+
-- Rust + Soroban CLI
-- A Stellar Testnet account ([create one here](https://laboratory.stellar.org/#account-creator))
+- Rust v1.84.0+
+- Stellar CLI v26.0.0+
+- WASM target: `rustup target add wasm32v1-none`
+- A Stellar Testnet keypair
 
-### Setup
+### Clone and build
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/stellar-trust-circles
-cd stellar-trust-circles
-npm install
-cp .env.example .env
+git clone https://github.com/Stellar-trust-circles/contracts
+cd contracts
+stellar contract build
 ```
 
-Edit `.env`:
-```
-STELLAR_SECRET_KEY=SXXX...   # your testnet secret key
-CONTRACT_ID=                  # leave blank until you deploy
-STELLAR_NETWORK=testnet
-```
-
-### Fund your testnet account
+### Fund your Testnet account
 
 ```bash
 curl "https://friendbot.stellar.org?addr=YOUR_PUBLIC_KEY"
 ```
 
-### Build and deploy the contract locally
+### Run tests
 
 ```bash
-npm run build:contract
-npm run deploy:testnet
-# Copy the output contract ID into your .env as CONTRACT_ID
-```
-
-### Run the CLI
-
-```bash
-node cli.js status
-node cli.js create --name "Test Circle" --amount 5 --cycle weekly --members ADDR1,ADDR2
+cargo test
 ```
 
 ---
 
-## How to contribute
+## Contribution workflow
 
-1. Check the [open issues](../../issues) — look for `good first issue` or `help wanted` labels
-2. Comment on the issue to claim it
-3. Fork the repo and create a branch: `git checkout -b feat/your-feature`
+1. Browse [open issues](../../issues) — look for `good first issue` or `help wanted`
+2. Comment on the issue to claim it before starting
+3. Fork the repo and create a branch using the name specified in the issue
 4. Make your changes
-5. Open a pull request with a clear description
+5. Run `cargo test` and make sure all tests pass
+6. Open a pull request using the commit message format in the issue description
 
 ---
 
-## Project structure
+## Branch naming
 
+| Type | Format | Example |
+|------|--------|---------|
+| New feature | `feat/description` | `feat/social-vouching` |
+| Bug fix | `fix/description` | `fix/payout-overflow` |
+| Tests | `test/description` | `test/governance-voting` |
+| Docs | `docs/description` | `docs/contract-functions` |
+
+---
+
+## Commit message format
+
+Follow this pattern:
 ```
-contracts/trust_circle/src/lib.rs   Soroban smart contract (Rust)
-src/stellar.js                       Stellar SDK integration (JS)
-cli.js                               CLI tool
+type: short description of what changed
 ```
 
----
-
-## Areas that need help
-
-- **Mobile UI** — React Native frontend for the contract
-- **Social verification** — vouching system for member trust
-- **Governance** — on-chain voting for circle rule changes.
-- **Tests** — Soroban contract unit tests.
-- **Docs** — tutorials for non-technical users.
+Types: `feat`, `fix`, `test`, `docs`, `chore`, `refactor`
 
 ---
 
-## Code of conduct
+## Code style
 
-Be kind and constructive. This project is for communities who depend on financial tools that work — keep that in mind
+- All functions must have a doc comment explaining what they do
+- Every new function needs at least one unit test
+- Keep assertions clear — error messages should explain what went wrong
+- No unused imports or dead code
+
+---
+
+## Need help?
+
+Open a [GitHub Discussion](../../discussions) or drop a message in the issue thread.

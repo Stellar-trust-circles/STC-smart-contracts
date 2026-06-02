@@ -1,23 +1,24 @@
-# Stellar Trust Circles
+# Trust Circle — Smart Contracts
 
-> Decentralized rotating savings groups — powered by Stellar and Soroban smart contracts.
+> Soroban smart contracts powering the Stellar Trust Circles platform — a decentralized rotating savings group protocol built on Stellar.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built on Stellar](https://img.shields.io/badge/Built%20on-Stellar-7C3AED)](https://stellar.org)
-[![Testnet Contract](https://img.shields.io/badge/Soroban-Testnet-0F6E56)](https://testnet.stellar.expert)
+[![Soroban](https://img.shields.io/badge/Soroban-Smart%20Contracts-0F6E56)](https://soroban.stellar.org)
+[![Testnet](https://img.shields.io/badge/Deployed-Testnet-854F0B)](https://testnet.stellar.expert/explorer/testnet/contract/CANM5X47IG3AM5JDG6DVGZ24B3RLBNT5653CXRUEUDWF6JERO4YEX6ZS)
 
 ---
 
-## What is this?
+## What is Stellar Trust Circles?
 
 Rotating savings groups — known as *ajo* in Nigeria, *chama* in Kenya, *tanda* in Latin America — are one of the oldest and most trusted forms of community finance. A group of people contribute a fixed amount regularly, and each cycle one member receives the full pot.
 
 **Stellar Trust Circles** brings this model on-chain:
 
-- Members contribute stablecoins (USDC) weekly or monthly
+- Members contribute USDC weekly or monthly
 - Payouts rotate automatically via Soroban smart contract
 - Every contribution and payout is transparently recorded on-chain
-- Members vote on circle rules (contribution amount, frequency, size)
+- Members vote on circle rules via on-chain governance
 - On-chain reputation builds across multiple circles
 - No bank. No middleman. No missed payouts.
 
@@ -37,120 +38,177 @@ Rotating savings groups — known as *ajo* in Nigeria, *chama* in Kenya, *tanda*
 
 ## How it works
 
-```
-Members join circle → contribute USDC each cycle → Soroban contract
-rotates payout to next member → on-chain history builds reputation
-```
+1. A **circle creator** calls `create_circle()` with a member list, contribution amount, and cycle length
+2. Each **member** calls `contribute()` before the cycle deadline — USDC is escrowed in the contract
+3. At cycle end, `release_payout()` sends the full pot to the next member in rotation
+4. Missed contributions are flagged on-chain and reduce the member's reputation score
+5. After all members have received once, the circle closes or restarts
 
-1. A **circle creator** deploys the contract with: member list, contribution amount, cycle length (weekly/monthly), payout order
-2. Each **member** calls `contribute()` before the cycle deadline
-3. At cycle end, the contract calls `release_payout()` — sending the full pot to the next member in rotation
-4. Missed contributions are flagged on-chain and affect the member's reputation score
-5. After all members have received once, the circle either **closes** or **restarts**
+---
+
+## Contract functions
+
+| Function | Description |
+|----------|-------------|
+| `create_circle` | Initialise a new savings circle |
+| `contribute` | Deposit USDC for the current cycle |
+| `release_payout` | Release the pot to the next member in rotation |
+| `get_circle` | Read current circle state (free, no transaction) |
+| `get_reputation` | Read a member's on-chain reputation score |
+| `has_contributed` | Check if a member contributed in a given cycle |
+| `restart_circle` | Restart a completed circle for another rotation |
+| `vouch` | Vouch for a new member (requires reputation ≥ 50) |
+| `get_vouches` | Return how many vouches an address has received |
+| `propose` | Submit a governance proposal to change circle rules |
+| `vote` | Vote yes or no on an open proposal |
+| `execute_proposal` | Execute a proposal that has reached majority |
+| `get_proposal` | Read a proposal by ID |
+
+---
+
+## Reputation system
+
+Every member has an on-chain reputation score:
+
+| Action | Change |
+|--------|--------|
+| Contribute on time | +10 points |
+| Miss a contribution | −20 points (saturates at 0) |
+
+| Score | Status |
+|-------|--------|
+| 0–49 | New member |
+| 50–99 | Building trust |
+| 100+ | Trusted |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│              Stellar Network                │
-│                                             │
-│  ┌─────────────────────────────────────┐   │
-│  │       Soroban Smart Contract        │   │
-│  │  - Circle state & member registry   │   │
-│  │  - Contribution escrow (USDC)       │   │
-│  │  - Rotation & payout logic          │   │
-│  │  - On-chain reputation scores       │   │
-│  └──────────────┬──────────────────────┘   │
-│                 │ Horizon API               │
-└─────────────────┼───────────────────────────┘
-                  │
-     ┌────────────▼────────────┐
-     │   Node.js SDK Layer     │
-     │  stellar-trust-circles  │
-     └────────────┬────────────┘
-                  │
-        ┌─────────▼──────────┐
-        │   CLI / Mobile UI  │
-        └────────────────────┘
+┌─────────────────────────────────────────────────┐
+│                 Stellar Network                 │
+│                                                 │
+│  ┌───────────────────────────────────────────┐  │
+│  │         Soroban Smart Contract            │  │
+│  │  - Circle state & member registry         │  │
+│  │  - USDC contribution escrow               │  │
+│  │  - Rotation & payout logic                │  │
+│  │  - On-chain reputation scores             │  │
+│  │  - Social vouching                        │  │
+│  │  - Governance proposals & voting          │  │
+│  └──────────────────┬────────────────────────┘  │
+│                     │ Horizon API / Soroban RPC  │
+└─────────────────────┼───────────────────────────┘
+                      │
+         ┌────────────▼────────────┐
+         │   Frontend (React)      │
+         │   github.com/Stellar-   │
+         │   trust-circles/frontend│
+         └─────────────────────────┘
 ```
 
 ---
 
-## Testnet Deployment
+## Deployed contracts
 
-| Item | Value |
-|------|-------|
-| Network | Stellar Testnet |
-| Contract ID | `CANM5X47IG3AM5JDG6DVGZ24B3RLBNT5653CXRUEUDWF6JERO4YEX6ZS` *(update after deploy)* |
-| USDC Asset | `USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5` (Testnet) |
+| Network | Contract ID |
+|---------|------------|
+| Testnet | [`CANM5X47IG3AM5JDG6DVGZ24B3RLBNT5653CXRUEUDWF6JERO4YEX6ZS`](https://testnet.stellar.expert/explorer/testnet/contract/CANM5X47IG3AM5JDG6DVGZ24B3RLBNT5653CXRUEUDWF6JERO4YEX6ZS) |
+| Mainnet | Coming soon |
 
 ---
 
-## Project Structure
+## Repository structure
 
 ```
-stellar-trust-circles/
+contracts/
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # Build + test on every push
 ├── contracts/
 │   └── trust_circle/
-│       ├── src/
-│       │   └── lib.rs          # Soroban smart contract
-│       └── Cargo.toml
-├── src/
-│   ├── stellar.js              # Stellar SDK integration
-│   ├── circle.js               # Circle management logic
-│   └── reputation.js           # On-chain reputation helpers
-├── cli.js                      # CLI demo tool
-├── .env.example                # Environment config template
-├── package.json
-├── FUNDING.json
+│       ├── Cargo.toml
+│       └── src/
+│           ├── lib.rs            # Full contract logic
+│           └── test.rs           # Unit tests
+├── Cargo.toml                    # Workspace config
 ├── CONTRIBUTING.md
+├── LICENSE
 └── README.md
 ```
 
 ---
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
-- Node.js v18+
-- Rust + Soroban CLI (`cargo install --locked soroban-cli`)
-- A Stellar Testnet keypair ([generate one here](https://laboratory.stellar.org/#account-creator))
+- Rust v1.84.0 or higher
+- Stellar CLI v26.0.0+
+- WASM build target
 
-### Install
+### Install Stellar CLI
 
 ```bash
-git clone https://github.com/Marvell69/stellar-trust-circles
-cd stellar-trust-circles
-npm install
-cp .env.example .env
-# Fill in your STELLAR_SECRET_KEY in .env
+curl -fsSL https://github.com/stellar/stellar-cli/raw/main/install.sh | sh -s -- --install-deps
 ```
 
-### Build & deploy the contract
+### Add the WASM target
 
 ```bash
-cd contracts/trust_circle
-soroban contract build
-soroban contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/trust_circle.wasm \
+rustup target add wasm32v1-none
+```
+
+### Configure Testnet
+
+```bash
+stellar network add \
+  --rpc-url https://soroban-testnet.stellar.org:443 \
+  --network-passphrase "Test SDF Network ; September 2015" \
+  testnet
+```
+
+### Generate and fund a keypair
+
+```bash
+stellar keys generate alice --network testnet
+curl "https://friendbot.stellar.org?addr=$(stellar keys address alice)"
+```
+
+### Clone and build
+
+```bash
+git clone https://github.com/Stellar-trust-circles/contracts
+cd contracts
+stellar contract build
+```
+
+### Run tests
+
+```bash
+cargo test
+```
+
+### Deploy to Testnet
+
+```bash
+stellar contract deploy \
+  --wasm target/wasm32v1-none/release/trust_circle.wasm \
+  --source alice \
   --network testnet \
-  --source YOUR_SECRET_KEY
+  --alias trust_circle
 ```
 
-### Run the CLI demo
+### Invoke a function
 
 ```bash
-# Create a new circle
-node cli.js create --name "Lagos Squad" --amount 10 --members 5 --cycle weekly
-
-# Contribute to a circle
-node cli.js contribute --circle <CONTRACT_ID> --amount 10
-
-# Check circle status
-node cli.js status --circle <CONTRACT_ID>
+stellar contract invoke \
+  --id trust_circle \
+  --source alice \
+  --network testnet \
+  -- \
+  get_circle
 ```
 
 ---
@@ -158,33 +216,35 @@ node cli.js status --circle <CONTRACT_ID>
 ## Roadmap
 
 - [x] Core contract: create circle, contribute, rotate payout
-- [x] On-chain contribution history
+- [x] On-chain contribution history and reputation scores
 - [x] Testnet deployment
-- [ ] Social verification (vouching system)
-- [ ] Governance voting on circle rules
-- [ ] Mobile-first UI (React Native)
-- [ ] Cross-circle reputation score
+- [x] GitHub Actions CI
+- [ ] Social vouching system
+- [ ] On-chain governance voting
+- [ ] Mainnet deployment
+- [ ] Cross-circle reputation aggregation
 - [ ] Circle discovery marketplace
+
+---
+
+## Organisation repositories
+
+| Repo | Description |
+|------|-------------|
+| [contracts](https://github.com/Stellar-trust-circles/contracts) | This repo — Soroban smart contracts |
+| [frontend](https://github.com/Stellar-trust-circles/frontend) | React web interface |
+| [documents](https://github.com/Stellar-trust-circles/documents) | Integration guide, user guide, architecture |
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run the project locally and pick up an open issue.
+See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up locally and pick up an open issue.
 
-Issues tagged [`good first issue`](../../issues?q=label%3A%22good+first+issue%22) are a great place to start
+Issues tagged [`good first issue`](../../issues?q=label%3A%22good+first+issue%22) are a great place to start.
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE)
-
----
-
-## Built with
-
-- [Stellar](https://stellar.org) — Layer 1 blockchain
-- [Soroban](https://soroban.stellar.org) — Stellar smart contracts
-- [Stellar JS SDK](https://github.com/stellar/js-stellar-sdk)
-- [Horizon API](https://developers.stellar.org/api/horizon)
