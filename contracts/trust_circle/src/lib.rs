@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(deprecated)]
 use soroban_sdk::{
     contract, contractimpl, contracttype, token, Address, Env, Map, String, Symbol, Vec,
 };
@@ -20,12 +21,12 @@ pub struct Circle {
     pub name: String,
     pub admin: Address,
     pub usdc_token: Address,
-    pub contribution_amount: i128, // in stroops (1 USDC = 10_000_000)
+    pub contribution_amount: i128,
     pub members: Vec<Address>,
     pub current_cycle: u32,
-    pub payout_index: u32,      // which member is next to receive
-    pub cycle_deadline: u64,    // ledger timestamp of next deadline
-    pub cycle_length_secs: u64, // e.g. 604800 = 1 week
+    pub payout_index: u32,
+    pub cycle_deadline: u64,
+    pub cycle_length_secs: u64,
     pub is_active: bool,
 }
 
@@ -64,7 +65,7 @@ impl TrustCircle {
 
         let now = env.ledger().timestamp();
         let circle = Circle {
-            name,
+            name: name.clone(),
             admin,
             usdc_token,
             contribution_amount,
@@ -81,25 +82,23 @@ impl TrustCircle {
             .instance()
             .set(&DataKey::Contributions, &Map::<(Address, u32), Contribution>::new(&env));
 
-        env.events()
-            .publish((Symbol::new(&env, "circle_created"),), circle.name.clone());
+        env.events().publish(
+            (Symbol::new(&env, "circle_crtd"),),
+            name,
+        );
     }
 
     /// A member contributes their share for the current cycle.
     pub fn contribute(env: Env, member: Address) {
         member.require_auth();
 
-        let mut circle: Circle = env.storage().instance().get(&DataKey::Circle).unwrap();
+        let circle: Circle = env.storage().instance().get(&DataKey::Circle).unwrap();
         assert!(circle.is_active, "Circle is not active");
-        assert!(
-            circle.members.contains(&member),
-            "Not a circle member"
-        );
+        assert!(circle.members.contains(&member), "Not a circle member");
 
         let now = env.ledger().timestamp();
         assert!(now <= circle.cycle_deadline, "Cycle deadline has passed");
 
-        // Check not already contributed this cycle
         let mut contributions: Map<(Address, u32), Contribution> = env
             .storage()
             .instance()
@@ -134,19 +133,21 @@ impl TrustCircle {
             .instance()
             .set(&DataKey::Contributions, &contributions);
 
-        // Update reputation: +1 on-time contribution
+        // Update reputation: +10 points per on-time contribution
         let rep_key = DataKey::Reputation(member.clone());
         let current_rep: u32 = env.storage().instance().get(&rep_key).unwrap_or(0);
         env.storage()
             .instance()
-            .set(&rep_key, &(current_rep + 10)); // +10 points per on-time contribution
+            .set(&rep_key, &(current_rep + 10));
 
-        env.events()
-            .publish((Symbol::new(&env, "contributed"),), (member, circle.current_cycle));
+        env.events().publish(
+            (Symbol::new(&env, "contributed"),),
+            (member, circle.current_cycle),
+        );
     }
 
     /// Release the payout to the next member in rotation.
-    /// Can be called by admin after cycle deadline, or auto if all members contributed.
+    /// Can be called by admin at any time, or by any member after the deadline.
     pub fn release_payout(env: Env, caller: Address) {
         caller.require_auth();
 
@@ -165,14 +166,13 @@ impl TrustCircle {
             .get(&DataKey::Contributions)
             .unwrap();
 
-        // Count how many contributed this cycle
+        // Tally contributions and penalise missed members
         let mut total_contributed: i128 = 0;
         for member in circle.members.iter() {
             let key = (member.clone(), circle.current_cycle);
             if contributions.contains_key(key) {
                 total_contributed += circle.contribution_amount;
             } else {
-                // Penalise missed contribution: -20 rep
                 let rep_key = DataKey::Reputation(member.clone());
                 let rep: u32 = env.storage().instance().get(&rep_key).unwrap_or(0);
                 env.storage()
@@ -193,7 +193,7 @@ impl TrustCircle {
         );
 
         env.events().publish(
-            (Symbol::new(&env, "payout_released"),),
+            (Symbol::new(&env, "payout_sent"),),
             (recipient.clone(), total_contributed, circle.current_cycle),
         );
 
@@ -202,22 +202,24 @@ impl TrustCircle {
         circle.current_cycle += 1;
         circle.cycle_deadline = now + circle.cycle_length_secs;
 
-        // If we've gone full circle, mark complete (or restart)
+        // If full rotation complete, mark circle as done
         if circle.payout_index == 0 {
-            circle.is_active = false; // one full rotation done — admin can restart
-            env.events()
-                .publish((Symbol::new(&env, "circle_complete"),), circle.current_cycle);
+            circle.is_active = false;
+            env.events().publish(
+                (Symbol::new(&env, "completed"),),
+                circle.current_cycle,
+            );
         }
 
         env.storage().instance().set(&DataKey::Circle, &circle);
     }
 
-    /// View the current circle state.
+    /// View the current circle state (read-only).
     pub fn get_circle(env: Env) -> Circle {
         env.storage().instance().get(&DataKey::Circle).unwrap()
     }
 
-    /// View a member's on-chain reputation score.
+    /// View a member's on-chain reputation score (read-only).
     pub fn get_reputation(env: Env, member: Address) -> u32 {
         env.storage()
             .instance()
@@ -225,7 +227,7 @@ impl TrustCircle {
             .unwrap_or(0)
     }
 
-    /// Check if a member has contributed in a given cycle.
+    /// Check if a member has contributed in a given cycle (read-only).
     pub fn has_contributed(env: Env, member: Address, cycle: u32) -> bool {
         let contributions: Map<(Address, u32), Contribution> = env
             .storage()
@@ -238,6 +240,7 @@ impl TrustCircle {
     /// Admin: restart a completed circle for another rotation.
     pub fn restart_circle(env: Env, admin: Address) {
         admin.require_auth();
+
         let mut circle: Circle = env.storage().instance().get(&DataKey::Circle).unwrap();
         assert!(circle.admin == admin, "Only admin can restart");
         assert!(!circle.is_active, "Circle is still active");
@@ -247,7 +250,12 @@ impl TrustCircle {
         circle.cycle_deadline = env.ledger().timestamp() + circle.cycle_length_secs;
 
         env.storage().instance().set(&DataKey::Circle, &circle);
-        env.events()
-            .publish((Symbol::new(&env, "circle_restarted"),), circle.current_cycle);
+
+        env.events().publish(
+            (Symbol::new(&env, "restarted"),),
+            circle.current_cycle,
+        );
     }
 }
+
+mod test;
