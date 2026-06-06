@@ -231,7 +231,7 @@ stellar contract invoke \
 
 | Repo | Description |
 |------|-------------|
-| [contracts](https://github.com/Stellar-trust-circles/contracts) | This repo — Soroban smart contracts |
+| [contracts](https://github.com/Stellar-trust-circles/STC-smart-contracts) | This repo — Soroban smart contracts |
 | [frontend](https://github.com/Stellar-trust-circles/Stellar-trust-circles-frontend) | React web interface |
 | [documents](https://github.com/Stellar-trust-circles/Stellar-trust-circles-documents) | Integration guide, user guide, architecture |
 
