@@ -2,10 +2,12 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _},
-    token::{Client as TokenClient, StellarAssetClient},
+    testutils::Address as _,
+    token::StellarAssetClient,
     Address, Env, String, Vec,
 };
+
+// ── Test helpers ──────────────────────────────────────────────────────────────
 
 fn setup_env() -> (Env, TrustCircleClient<'static>, Address, Address, Address) {
     let env = Env::default();
@@ -16,16 +18,19 @@ fn setup_env() -> (Env, TrustCircleClient<'static>, Address, Address, Address) {
     let usdc_contract = env.register_stellar_asset_contract_v2(usdc_admin.clone());
     let usdc = usdc_contract.address();
 
-    // Mint USDC to admin and member2 so they can contribute
     let admin = Address::generate(&env);
     let member2 = Address::generate(&env);
 
-    StellarAssetClient::new(&env, &usdc).mint(&admin, &1_000_000_000);
-    StellarAssetClient::new(&env, &usdc).mint(&member2, &1_000_000_000);
+    // Mint plenty of USDC to all parties
+    StellarAssetClient::new(&env, &usdc).mint(&admin, &10_000_000_000);
+    StellarAssetClient::new(&env, &usdc).mint(&member2, &10_000_000_000);
 
     // Register Trust Circle contract
     let contract_id = env.register(TrustCircle, ());
     let client = TrustCircleClient::new(&env, &contract_id);
+
+    // Mint USDC to the contract so it can release payouts
+    StellarAssetClient::new(&env, &usdc).mint(&contract_id, &10_000_000_000);
 
     let mut members = Vec::new(&env);
     members.push_back(admin.clone());
@@ -43,11 +48,44 @@ fn setup_env() -> (Env, TrustCircleClient<'static>, Address, Address, Address) {
     (env, client, admin, member2, usdc)
 }
 
+/// Build reputation for a member by contributing across N full rotations.
+/// With 2 members, one full rotation = 2 cycles (each member receives once).
+/// After each full rotation the circle closes — we restart it each time.
+/// Each contribute gives +10 rep, so 5 contributions = 50 rep.
+fn build_reputation(
+    client: &TrustCircleClient,
+    member: &Address,
+    other: &Address,
+    contributions_needed: u32,
+) {
+    for i in 0..contributions_needed {
+        // contribute as the target member each cycle
+        client.contribute(member);
+
+        // If the other member hasn't contributed this cycle,
+        // contribute as them too so payout can be released
+        // (we only need one member to contribute for payout to work
+        //  but both need to so the circle stays healthy)
+        client.contribute(other);
+        client.release_payout(member);
+
+        // After every 2 cycles the circle completes (2 members = 2 payouts = done)
+        // Restart it so we can keep going
+        let circle = client.get_circle();
+        if !circle.is_active {
+            client.restart_circle(member);
+        }
+
+        let _ = i; // suppress unused warning
+    }
+}
+
+// ── Core tests ────────────────────────────────────────────────────────────────
+
 /// Circle should be active on cycle 1 right after creation
 #[test]
 fn test_create_circle() {
     let (_env, client, _admin, _member2, _usdc) = setup_env();
-
     let circle = client.get_circle();
 
     assert_eq!(circle.current_cycle, 1, "Should start on cycle 1");
@@ -68,7 +106,128 @@ fn test_contribute() {
         client.has_contributed(&admin, &1u32),
         "Admin should show as contributed for cycle 1"
     );
-
     let rep = client.get_reputation(&admin);
     assert_eq!(rep, 10, "Reputation should increase by 10");
+}
+
+/// Cannot contribute twice in the same cycle
+#[test]
+#[should_panic(expected = "Already contributed this cycle")]
+fn test_cannot_contribute_twice_in_same_cycle() {
+    let (_env, client, admin, _member2, _usdc) = setup_env();
+
+    client.contribute(&admin);
+    client.contribute(&admin); // should panic
+}
+
+/// After both members contribute and payout is released,
+/// cycle should advance and payout index should move to member 2
+#[test]
+fn test_payout_rotation() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    client.contribute(&admin);
+    client.contribute(&member2);
+    client.release_payout(&admin);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.current_cycle, 2, "Cycle should advance to 2");
+    assert_eq!(circle.payout_index, 1, "Payout index should advance to member 2");
+}
+
+/// A member who misses a contribution should have their reputation penalised
+#[test]
+fn test_missed_contribution_penalises_reputation() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    // Only admin contributes — member2 misses
+    client.contribute(&admin);
+    client.release_payout(&admin);
+
+    let rep = client.get_reputation(&member2);
+    assert_eq!(rep, 0, "Missed member reputation should saturate at 0");
+
+    let admin_rep = client.get_reputation(&admin);
+    assert_eq!(admin_rep, 10, "Admin should have 10 reputation points");
+}
+
+// ── Vouching tests ────────────────────────────────────────────────────────────
+
+/// A new address should start with 0 vouches
+#[test]
+fn test_new_address_has_zero_vouches() {
+    let (env, client, _admin, _member2, _usdc) = setup_env();
+    let newcomer = Address::generate(&env);
+
+    let count = client.get_vouches(&newcomer);
+    assert_eq!(count, 0, "New address should have 0 vouches");
+}
+
+/// A member with low reputation cannot vouch
+#[test]
+#[should_panic(expected = "Need reputation >= 50 to vouch for others")]
+fn test_vouch_with_low_reputation_fails() {
+    let (env, client, admin, _member2, _usdc) = setup_env();
+    let newcomer = Address::generate(&env);
+
+    // Admin has 0 rep — should panic
+    client.vouch(&admin, &newcomer);
+}
+
+/// A member with sufficient reputation (>= 50) can vouch successfully
+#[test]
+fn test_vouch_with_sufficient_reputation_succeeds() {
+    let (env, client, admin, member2, _usdc) = setup_env();
+    let newcomer = Address::generate(&env);
+
+    // 5 contributions x 10 rep each = 50 rep
+    // With 2 members: 2 cycles per rotation, 3 rotations needed
+    // rotation 1: cycles 1+2, rotation 2: cycles 3+4, then cycle 5
+    build_reputation(&client, &admin, &member2, 5);
+
+    let rep = client.get_reputation(&admin);
+    assert!(rep >= 50, "Admin should have at least 50 rep, got {}", rep);
+
+    client.vouch(&admin, &newcomer);
+
+    let count = client.get_vouches(&newcomer);
+    assert_eq!(count, 1, "Newcomer should have 1 vouch");
+}
+
+/// Cannot vouch for the same address twice
+#[test]
+#[should_panic(expected = "Already vouched for this address")]
+fn test_cannot_vouch_twice() {
+    let (env, client, admin, member2, _usdc) = setup_env();
+    let newcomer = Address::generate(&env);
+
+    build_reputation(&client, &admin, &member2, 5);
+
+    // First vouch succeeds
+    client.vouch(&admin, &newcomer);
+
+    // Second vouch for same newcomer should panic
+    client.vouch(&admin, &newcomer);
+}
+
+/// Multiple different members can vouch for the same newcomer
+#[test]
+fn test_multiple_vouches_accumulate() {
+    let (env, client, admin, member2, _usdc) = setup_env();
+    let newcomer = Address::generate(&env);
+
+    // Build rep for both admin and member2
+    build_reputation(&client, &admin, &member2, 5);
+
+    let admin_rep = client.get_reputation(&admin);
+    let member2_rep = client.get_reputation(&member2);
+    assert!(admin_rep >= 50, "Admin should have >= 50 rep");
+    assert!(member2_rep >= 50, "Member2 should have >= 50 rep");
+
+    // Both vouch for the newcomer
+    client.vouch(&admin, &newcomer);
+    client.vouch(&member2, &newcomer);
+
+    let count = client.get_vouches(&newcomer);
+    assert_eq!(count, 2, "Newcomer should have 2 vouches");
 }

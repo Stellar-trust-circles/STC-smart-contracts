@@ -11,6 +11,7 @@ pub enum DataKey {
     Circle,
     Contributions,
     Reputation(Address),
+    Vouches(Address),
 }
 
 // ── Data types ────────────────────────────────────────────────────────────────
@@ -255,6 +256,52 @@ impl TrustCircle {
             (Symbol::new(&env, "restarted"),),
             circle.current_cycle,
         );
+    }
+
+    /// Vouch for a newcomer address.
+    /// The voucher must have a reputation score of at least 50.
+    /// A voucher can only vouch once per newcomer.
+    pub fn vouch(env: Env, voucher: Address, newcomer: Address) {
+        voucher.require_auth();
+
+        // Check voucher has enough reputation
+        let rep: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Reputation(voucher.clone()))
+            .unwrap_or(0);
+        assert!(rep >= 50, "Need reputation >= 50 to vouch for others");
+
+        // Load existing vouches for this newcomer
+        let mut vouches: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Vouches(newcomer.clone()))
+            .unwrap_or(Vec::new(&env));
+
+        // Prevent double vouching
+        assert!(!vouches.contains(&voucher), "Already vouched for this address");
+
+        // Record the vouch
+        vouches.push_back(voucher.clone());
+        env.storage()
+            .instance()
+            .set(&DataKey::Vouches(newcomer.clone()), &vouches);
+
+        env.events().publish(
+            (Symbol::new(&env, "vouched"),),
+            (voucher, newcomer),
+        );
+    }
+
+    /// Return how many vouches an address has received (read-only).
+    pub fn get_vouches(env: Env, address: Address) -> u32 {
+        let vouches: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Vouches(address))
+            .unwrap_or(Vec::new(&env));
+        vouches.len()
     }
 }
 
