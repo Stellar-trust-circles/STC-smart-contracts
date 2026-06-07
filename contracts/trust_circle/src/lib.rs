@@ -12,6 +12,8 @@ pub enum DataKey {
     Contributions,
     Reputation(Address),
     Vouches(Address),
+    Proposals,
+    NextProposalId,
 }
 
 // ── Data types ────────────────────────────────────────────────────────────────
@@ -38,6 +40,27 @@ pub struct Contribution {
     pub cycle: u32,
     pub amount: i128,
     pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub enum ProposalType {
+    ChangeAmount(i128),
+    ChangeCycleLength(u64),
+    AddMember(Address),
+    RemoveMember(Address),
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct Proposal {
+    pub id: u32,
+    pub proposer: Address,
+    pub proposal_type: ProposalType,
+    pub votes_yes: u32,
+    pub votes_no: u32,
+    pub voters: Vec<Address>,
+    pub executed: bool,
 }
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -264,7 +287,6 @@ impl TrustCircle {
     pub fn vouch(env: Env, voucher: Address, newcomer: Address) {
         voucher.require_auth();
 
-        // Check voucher has enough reputation
         let rep: u32 = env
             .storage()
             .instance()
@@ -272,17 +294,14 @@ impl TrustCircle {
             .unwrap_or(0);
         assert!(rep >= 50, "Need reputation >= 50 to vouch for others");
 
-        // Load existing vouches for this newcomer
         let mut vouches: Vec<Address> = env
             .storage()
             .instance()
             .get(&DataKey::Vouches(newcomer.clone()))
             .unwrap_or(Vec::new(&env));
 
-        // Prevent double vouching
         assert!(!vouches.contains(&voucher), "Already vouched for this address");
 
-        // Record the vouch
         vouches.push_back(voucher.clone());
         env.storage()
             .instance()
@@ -302,6 +321,159 @@ impl TrustCircle {
             .get(&DataKey::Vouches(address))
             .unwrap_or(Vec::new(&env));
         vouches.len()
+    }
+
+    /// Any circle member can submit a proposal to change a circle rule.
+    /// Returns the new proposal ID.
+    pub fn propose(env: Env, proposer: Address, proposal_type: ProposalType) -> u32 {
+        proposer.require_auth();
+
+        let circle: Circle = env.storage().instance().get(&DataKey::Circle).unwrap();
+        assert!(circle.members.contains(&proposer), "Only members can propose");
+
+        let id: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NextProposalId)
+            .unwrap_or(0);
+
+        let proposal = Proposal {
+            id,
+            proposer: proposer.clone(),
+            proposal_type,
+            votes_yes: 0,
+            votes_no: 0,
+            voters: Vec::new(&env),
+            executed: false,
+        };
+
+        let mut proposals: Map<u32, Proposal> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Proposals)
+            .unwrap_or(Map::new(&env));
+
+        proposals.set(id, proposal);
+        env.storage()
+            .instance()
+            .set(&DataKey::Proposals, &proposals);
+        env.storage()
+            .instance()
+            .set(&DataKey::NextProposalId, &(id + 1));
+
+        env.events().publish(
+            (Symbol::new(&env, "proposed"),),
+            (proposer, id),
+        );
+
+        id
+    }
+
+    /// A circle member votes yes or no on an open proposal.
+    /// Each member gets exactly one vote per proposal.
+    pub fn vote(env: Env, voter: Address, proposal_id: u32, vote_yes: bool) {
+        voter.require_auth();
+
+        let circle: Circle = env.storage().instance().get(&DataKey::Circle).unwrap();
+        assert!(circle.members.contains(&voter), "Only members can vote");
+
+        let mut proposals: Map<u32, Proposal> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Proposals)
+            .unwrap();
+
+        let mut proposal = proposals.get(proposal_id).unwrap();
+        assert!(!proposal.executed, "Proposal already executed");
+        assert!(
+            !proposal.voters.contains(&voter),
+            "Already voted on this proposal"
+        );
+
+        if vote_yes {
+            proposal.votes_yes += 1;
+        } else {
+            proposal.votes_no += 1;
+        }
+        proposal.voters.push_back(voter.clone());
+
+        proposals.set(proposal_id, proposal);
+        env.storage()
+            .instance()
+            .set(&DataKey::Proposals, &proposals);
+
+        env.events().publish(
+            (Symbol::new(&env, "voted"),),
+            (voter, proposal_id, vote_yes),
+        );
+    }
+
+    /// Execute a passed proposal. Requires votes_yes > total_members / 2.
+    /// Applies the rule change to the circle immediately.
+    pub fn execute_proposal(env: Env, caller: Address, proposal_id: u32) {
+        caller.require_auth();
+
+        let mut circle: Circle = env.storage().instance().get(&DataKey::Circle).unwrap();
+
+        let mut proposals: Map<u32, Proposal> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Proposals)
+            .unwrap();
+
+        let mut proposal = proposals.get(proposal_id).unwrap();
+        assert!(!proposal.executed, "Proposal already executed");
+
+        let total_members = circle.members.len();
+        assert!(
+            proposal.votes_yes > total_members / 2,
+            "Proposal has not reached majority"
+        );
+
+        // Apply the rule change
+        match proposal.proposal_type.clone() {
+            ProposalType::ChangeAmount(new_amount) => {
+                circle.contribution_amount = new_amount;
+            }
+            ProposalType::ChangeCycleLength(new_length) => {
+                circle.cycle_length_secs = new_length;
+            }
+            ProposalType::AddMember(new_member) => {
+                circle.members.push_back(new_member);
+            }
+            ProposalType::RemoveMember(member) => {
+                let mut new_members = Vec::new(&env);
+                for m in circle.members.iter() {
+                    if m != member {
+                        new_members.push_back(m);
+                    }
+                }
+                circle.members = new_members;
+            }
+        }
+
+        proposal.executed = true;
+        proposals.set(proposal_id, proposal);
+
+        env.storage().instance().set(&DataKey::Circle, &circle);
+        env.storage()
+            .instance()
+            .set(&DataKey::Proposals, &proposals);
+
+        env.events().publish(
+            (Symbol::new(&env, "executed"),),
+            proposal_id,
+        );
+    }
+
+    /// Read a single proposal by ID (read-only).
+    pub fn get_proposal(env: Env, proposal_id: u32) -> Proposal {
+        let proposals: Map<u32, Proposal> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Proposals)
+            .unwrap();
+        proposals.get(proposal_id).unwrap()
     }
 }
 
