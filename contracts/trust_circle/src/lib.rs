@@ -136,10 +136,11 @@ impl TrustCircle {
         );
 
         // Transfer USDC from member to this contract
+        // `from` requires &Address, `to` accepts Address (MuxedAddress)
         let token_client = token::Client::new(&env, &circle.usdc_token);
         token_client.transfer(
             &member,
-            &env.current_contract_address(),
+            env.current_contract_address(),
             &circle.contribution_amount,
         );
 
@@ -208,11 +209,12 @@ impl TrustCircle {
         assert!(total_contributed > 0, "No contributions to pay out");
 
         // Send payout to the next recipient in rotation
+        // `from` requires &Address, `to` accepts Address (MuxedAddress)
         let recipient = circle.members.get(circle.payout_index).unwrap();
         let token_client = token::Client::new(&env, &circle.usdc_token);
         token_client.transfer(
             &env.current_contract_address(),
-            &recipient,
+            recipient.clone(),
             &total_contributed,
         );
 
