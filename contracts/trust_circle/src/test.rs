@@ -474,3 +474,31 @@ fn test_execute_marks_proposal_executed() {
     let proposal = client.get_proposal(&id);
     assert!(proposal.executed, "Proposal should be marked executed");
 }
+
+/// Multiple proposals can exist independently
+#[test]
+fn test_multiple_proposals() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let id0 = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    let id1 = client.propose(&member2, &ProposalType::ChangeCycleLength(1_209_600u64));
+
+    // Vote and execute first proposal
+    client.vote(&admin, &id0, &true);
+    client.vote(&member2, &id0, &true);
+    client.execute_proposal(&admin, &id0);
+
+    // Second proposal is still open
+    let p1 = client.get_proposal(&id1);
+    assert!(!p1.executed, "Second proposal should not be executed yet");
+    assert_eq!(p1.votes_yes, 0);
+
+    // Now vote and execute it
+    client.vote(&admin, &id1, &true);
+    client.vote(&member2, &id1, &true);
+    client.execute_proposal(&admin, &id1);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.contribution_amount, 200_000_000);
+    assert_eq!(circle.cycle_length_secs, 1_209_600);
+}
