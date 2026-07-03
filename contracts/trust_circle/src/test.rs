@@ -360,3 +360,16 @@ fn test_execute_rejects_zero_votes() {
     let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
     client.execute_proposal(&admin, &id);
 }
+
+/// Cannot execute an already-executed proposal
+#[test]
+#[should_panic(expected = "Proposal already executed")]
+fn test_cannot_execute_twice() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    client.execute_proposal(&admin, &id);
+    client.execute_proposal(&admin, &id); // should panic
+}
