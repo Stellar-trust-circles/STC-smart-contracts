@@ -460,3 +460,17 @@ fn test_execute_remove_member() {
         "Removed member should not be in the circle"
     );
 }
+
+/// Executing a proposal marks it as executed
+#[test]
+fn test_execute_marks_proposal_executed() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    client.execute_proposal(&admin, &id);
+
+    let proposal = client.get_proposal(&id);
+    assert!(proposal.executed, "Proposal should be marked executed");
+}
