@@ -274,3 +274,18 @@ fn test_propose_rejects_non_member() {
 
     client.propose(&outsider, &ProposalType::ChangeAmount(200_000_000i128));
 }
+
+/// Voting yes tallies correctly
+#[test]
+fn test_vote_yes() {
+    let (_env, client, admin, _member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &true);
+
+    let proposal = client.get_proposal(&id);
+    assert_eq!(proposal.votes_yes, 1, "Should have 1 yes vote");
+    assert_eq!(proposal.votes_no, 0, "Should have 0 no votes");
+    assert_eq!(proposal.voters.len(), 1, "Should have 1 voter");
+    assert!(proposal.voters.contains(&admin));
+}
