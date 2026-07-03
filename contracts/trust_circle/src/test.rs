@@ -396,3 +396,18 @@ fn test_cannot_vote_on_executed_proposal() {
     // member3 tries to vote on the already-executed proposal — should panic
     client.vote(&member3, &id, &true);
 }
+
+/// Executing a ChangeAmount proposal updates contribution_amount
+#[test]
+fn test_execute_change_amount() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let new_amount = 200_000_000i128;
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(new_amount));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    client.execute_proposal(&admin, &id);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.contribution_amount, new_amount);
+}
