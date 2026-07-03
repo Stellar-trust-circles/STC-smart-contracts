@@ -520,3 +520,20 @@ fn test_rejected_proposal_no_change() {
     let circle = client.get_circle();
     assert_eq!(circle.contribution_amount, 100_000_000, "Amount should be unchanged");
 }
+
+/// Anyone can execute a passed proposal (no membership check on execute)
+/// This verifies the contract allows non-member callers to trigger execution
+#[test]
+fn test_execute_by_non_member_succeeds_if_votes_pass() {
+    let (env, client, admin, member2, _usdc) = setup_env();
+    let outsider = Address::generate(&env);
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    // Outsider executes — auth is mocked so it passes
+    client.execute_proposal(&outsider, &id);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.contribution_amount, 200_000_000);
+}
