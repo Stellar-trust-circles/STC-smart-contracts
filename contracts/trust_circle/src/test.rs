@@ -373,3 +373,26 @@ fn test_cannot_execute_twice() {
     client.execute_proposal(&admin, &id);
     client.execute_proposal(&admin, &id); // should panic
 }
+
+/// Cannot vote on an already-executed proposal (with 3rd member who hasn't voted)
+#[test]
+#[should_panic(expected = "Proposal already executed")]
+fn test_cannot_vote_on_executed_proposal() {
+    let (env, client, admin, member2, _usdc) = setup_env();
+    let member3 = Address::generate(&env);
+
+    // Add member3 via proposal so the circle has 3 members
+    let add_id = client.propose(&admin, &ProposalType::AddMember(member3.clone()));
+    client.vote(&admin, &add_id, &true);
+    client.vote(&member2, &add_id, &true);
+    client.execute_proposal(&admin, &add_id);
+
+    // Create and execute a second proposal — member3 does NOT vote
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    client.execute_proposal(&admin, &id);
+
+    // member3 tries to vote on the already-executed proposal — should panic
+    client.vote(&member3, &id, &true);
+}
