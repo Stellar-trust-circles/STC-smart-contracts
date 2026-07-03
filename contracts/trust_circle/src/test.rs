@@ -252,3 +252,15 @@ fn test_propose_creates_proposal() {
     assert!(!proposal.executed);
     assert_eq!(proposal.voters.len(), 0);
 }
+
+/// Proposal IDs increment sequentially
+#[test]
+fn test_proposal_ids_increment() {
+    let (_env, client, admin, _member2, _usdc) = setup_env();
+
+    let id0 = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    let id1 = client.propose(&admin, &ProposalType::ChangeCycleLength(1209600u64));
+
+    assert_eq!(id0, 0);
+    assert_eq!(id1, 1);
+}
