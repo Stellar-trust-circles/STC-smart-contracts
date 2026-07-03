@@ -316,3 +316,14 @@ fn test_both_members_vote_yes() {
     assert_eq!(proposal.votes_yes, 2);
     assert_eq!(proposal.votes_no, 0);
 }
+
+/// A member cannot vote twice on the same proposal
+#[test]
+#[should_panic(expected = "Already voted on this proposal")]
+fn test_cannot_double_vote() {
+    let (_env, client, admin, _member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &true);
+    client.vote(&admin, &id, &true); // should panic
+}
