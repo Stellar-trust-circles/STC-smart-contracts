@@ -350,3 +350,13 @@ fn test_execute_rejects_insufficient_votes() {
     client.vote(&admin, &id, &true);
     client.execute_proposal(&member2, &id);
 }
+
+/// Cannot execute a proposal with zero votes
+#[test]
+#[should_panic(expected = "Proposal has not reached majority")]
+fn test_execute_rejects_zero_votes() {
+    let (_env, client, admin, _member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.execute_proposal(&admin, &id);
+}
