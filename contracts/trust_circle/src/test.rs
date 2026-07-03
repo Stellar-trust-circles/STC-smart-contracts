@@ -442,3 +442,21 @@ fn test_execute_add_member() {
     assert_eq!(circle.members.len(), 3, "Circle should now have 3 members");
     assert!(circle.members.contains(&new_member), "New member should be in the circle");
 }
+
+/// Executing a RemoveMember proposal removes the member from the circle
+#[test]
+fn test_execute_remove_member() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::RemoveMember(member2.clone()));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    client.execute_proposal(&admin, &id);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.members.len(), 1, "Circle should now have 1 member");
+    assert!(
+        !circle.members.contains(&member2),
+        "Removed member should not be in the circle"
+    );
+}
