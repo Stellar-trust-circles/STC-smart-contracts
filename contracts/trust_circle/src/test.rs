@@ -502,3 +502,21 @@ fn test_multiple_proposals() {
     assert_eq!(circle.contribution_amount, 200_000_000);
     assert_eq!(circle.cycle_length_secs, 1_209_600);
 }
+
+/// A rejected proposal (majority no) does not change the circle
+#[test]
+fn test_rejected_proposal_no_change() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(999_999_999i128));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &false);
+
+    // Cannot execute — only 1 yes out of 2, majority not reached
+    let proposal = client.get_proposal(&id);
+    assert_eq!(proposal.votes_yes, 1);
+    assert_eq!(proposal.votes_no, 1);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.contribution_amount, 100_000_000, "Amount should be unchanged");
+}
