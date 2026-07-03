@@ -327,3 +327,14 @@ fn test_cannot_double_vote() {
     client.vote(&admin, &id, &true);
     client.vote(&admin, &id, &true); // should panic
 }
+
+/// A non-member cannot vote
+#[test]
+#[should_panic(expected = "Only members can vote")]
+fn test_vote_rejects_non_member() {
+    let (env, client, admin, _member2, _usdc) = setup_env();
+    let outsider = Address::generate(&env);
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&outsider, &id, &true);
+}
