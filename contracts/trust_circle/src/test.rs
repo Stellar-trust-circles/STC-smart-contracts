@@ -426,3 +426,19 @@ fn test_execute_change_cycle_length() {
     let circle = client.get_circle();
     assert_eq!(circle.cycle_length_secs, new_length);
 }
+
+/// Executing an AddMember proposal adds the new member to the circle
+#[test]
+fn test_execute_add_member() {
+    let (env, client, admin, member2, _usdc) = setup_env();
+    let new_member = Address::generate(&env);
+
+    let id = client.propose(&admin, &ProposalType::AddMember(new_member.clone()));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    client.execute_proposal(&admin, &id);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.members.len(), 3, "Circle should now have 3 members");
+    assert!(circle.members.contains(&new_member), "New member should be in the circle");
+}
