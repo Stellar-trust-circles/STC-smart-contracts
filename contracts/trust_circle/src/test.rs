@@ -231,3 +231,24 @@ fn test_multiple_vouches_accumulate() {
     let count = client.get_vouches(&newcomer);
     assert_eq!(count, 2, "Newcomer should have 2 vouches");
 }
+
+// ── Governance tests ──────────────────────────────────────────────────────────
+
+/// A member can create a proposal and it is stored correctly
+#[test]
+fn test_propose_creates_proposal() {
+    let (_env, client, admin, _member2, _usdc) = setup_env();
+
+    let new_amount = 200_000_000i128;
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(new_amount));
+
+    assert_eq!(id, 0, "First proposal should have ID 0");
+
+    let proposal = client.get_proposal(&id);
+    assert_eq!(proposal.id, 0);
+    assert_eq!(proposal.proposer, admin);
+    assert_eq!(proposal.votes_yes, 0);
+    assert_eq!(proposal.votes_no, 0);
+    assert!(!proposal.executed);
+    assert_eq!(proposal.voters.len(), 0);
+}
