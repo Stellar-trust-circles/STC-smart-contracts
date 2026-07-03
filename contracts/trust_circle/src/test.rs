@@ -338,3 +338,15 @@ fn test_vote_rejects_non_member() {
     let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
     client.vote(&outsider, &id, &true);
 }
+
+/// Cannot execute a proposal that hasn't reached majority
+#[test]
+#[should_panic(expected = "Proposal has not reached majority")]
+fn test_execute_rejects_insufficient_votes() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    // Only 1 yes vote out of 2 members — not a majority (>1)
+    client.vote(&admin, &id, &true);
+    client.execute_proposal(&member2, &id);
+}
