@@ -411,3 +411,18 @@ fn test_execute_change_amount() {
     let circle = client.get_circle();
     assert_eq!(circle.contribution_amount, new_amount);
 }
+
+/// Executing a ChangeCycleLength proposal updates cycle_length_secs
+#[test]
+fn test_execute_change_cycle_length() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let new_length = 1_209_600u64; // 2 weeks
+    let id = client.propose(&admin, &ProposalType::ChangeCycleLength(new_length));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+    client.execute_proposal(&admin, &id);
+
+    let circle = client.get_circle();
+    assert_eq!(circle.cycle_length_secs, new_length);
+}
