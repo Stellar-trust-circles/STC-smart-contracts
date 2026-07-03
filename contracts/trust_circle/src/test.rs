@@ -289,3 +289,16 @@ fn test_vote_yes() {
     assert_eq!(proposal.voters.len(), 1, "Should have 1 voter");
     assert!(proposal.voters.contains(&admin));
 }
+
+/// Voting no tallies correctly
+#[test]
+fn test_vote_no() {
+    let (_env, client, admin, _member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &false);
+
+    let proposal = client.get_proposal(&id);
+    assert_eq!(proposal.votes_yes, 0);
+    assert_eq!(proposal.votes_no, 1);
+}
