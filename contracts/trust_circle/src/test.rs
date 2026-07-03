@@ -264,3 +264,13 @@ fn test_proposal_ids_increment() {
     assert_eq!(id0, 0);
     assert_eq!(id1, 1);
 }
+
+/// A non-member cannot create a proposal
+#[test]
+#[should_panic(expected = "Only members can propose")]
+fn test_propose_rejects_non_member() {
+    let (env, client, _admin, _member2, _usdc) = setup_env();
+    let outsider = Address::generate(&env);
+
+    client.propose(&outsider, &ProposalType::ChangeAmount(200_000_000i128));
+}
