@@ -302,3 +302,17 @@ fn test_vote_no() {
     assert_eq!(proposal.votes_yes, 0);
     assert_eq!(proposal.votes_no, 1);
 }
+
+/// Both members vote yes on a proposal
+#[test]
+fn test_both_members_vote_yes() {
+    let (_env, client, admin, member2, _usdc) = setup_env();
+
+    let id = client.propose(&admin, &ProposalType::ChangeAmount(200_000_000i128));
+    client.vote(&admin, &id, &true);
+    client.vote(&member2, &id, &true);
+
+    let proposal = client.get_proposal(&id);
+    assert_eq!(proposal.votes_yes, 2);
+    assert_eq!(proposal.votes_no, 0);
+}
