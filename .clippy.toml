@@ -1,0 +1,11 @@
+# .clippy.toml
+# Clippy configuration for the Trust Circle contract workspace.
+# Clippy is run in CI with -D warnings (any warning = build failure).
+# This file documents any lints that are explicitly configured or suppressed
+# at the workspace level, and why.
+
+# Restrict integer arithmetic to catch potential overflows in reputation
+# and contribution amount calculations. We prefer saturating_add / saturating_sub
+# on reputation, and checked arithmetic on contribution totals.
+# Note: we use #![allow(deprecated)] to suppress the soroban-sdk v25 events
+# deprecation warning while staying pinned to that SDK version — see lib.rs.
